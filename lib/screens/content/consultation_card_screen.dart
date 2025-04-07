@@ -103,6 +103,11 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
     super.dispose();
   }
   
+  // キャッシュ用の静的変数
+  static Map<String, dynamic>? _cachedCardData;
+  static String? _cachedUserEmail;
+  static DateTime? _cacheTimestamp;
+  
   // 相談カルテの情報を読み込む
   Future<void> _loadConsultationCard() async {
     setState(() => _isLoading = true);
@@ -119,58 +124,92 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
         // 実際の実装ではログイン画面に戻すことも考えられます
       }
       
-      // データベースから相談カルテ情報を取得
-      final dbService = DatabaseService();
-      await dbService.connect();
-      
       // nullableな値を非nullableに変換（null/空の場合はダミーメールを使用）
       final String email = userEmail?.isNotEmpty == true ? userEmail! : 'user@example.com';
-      final result = await dbService.getConsultationCard(email);
-      await dbService.disconnect();
+      
+      // キャッシュが有効かチェック（同じユーザーで5分以内のデータ）
+      final bool isCacheValid = _cachedCardData != null && 
+                               _cachedUserEmail == email && 
+                               _cacheTimestamp != null &&
+                               DateTime.now().difference(_cacheTimestamp!).inMinutes < 5;
+      
+      Map<String, dynamic> result;
+      
+      if (isCacheValid) {
+        // キャッシュからデータを使用
+        print('キャッシュから相談カルテデータを使用します');
+        result = {
+          'success': true,
+          'exists': true,
+          'card': _cachedCardData
+        };
+      } else {
+        // データベースから相談カルテ情報を取得
+        final dbService = DatabaseService();
+        await dbService.connect();
+        
+        result = await dbService.getConsultationCard(email);
+        // 接続を維持するため、disconnectを呼び出さない
+        
+        // 成功した場合はキャッシュを更新
+        if (result['success'] && result['exists']) {
+          _cachedCardData = result['card'];
+          _cachedUserEmail = email;
+          _cacheTimestamp = DateTime.now();
+        }
+      }
       
       if (result['success'] && result['exists']) {
         final cardData = result['card'];
         
         // 自分の情報をセット
-        setState(() {
-          _selfNameController.text = cardData['self_name'] ?? '';
-          _selfGender = cardData['self_gender'] ?? '男性';
-          _selfBirthdateController.text = cardData['self_birthdate'] ?? '';
-          _selfBirthplaceController.text = cardData['self_birthplace'] ?? '';
-          _selfBirthtimeController.text = cardData['self_birthtime'] ?? '';
-          _selfConcernsController.text = cardData['self_concerns'] ?? '';
-          
-          // 相手の情報（カルテ1）
-          _partner1NameController.text = cardData['partner1_name'] ?? '';
-          _partner1Gender = cardData['partner1_gender'] ?? '';
-          _partner1BirthdateController.text = cardData['partner1_birthdate'] ?? '';
-          _partner1BirthplaceController.text = cardData['partner1_birthplace'] ?? '';
-          _partner1BirthtimeController.text = cardData['partner1_birthtime'] ?? '';
-          _partner1RelationshipController.text = cardData['partner1_relationship'] ?? '';
-          
-          // 相手の情報（カルテ2）
-          _partner2NameController.text = cardData['partner2_name'] ?? '';
-          _partner2Gender = cardData['partner2_gender'] ?? '';
-          _partner2BirthdateController.text = cardData['partner2_birthdate'] ?? '';
-          _partner2BirthplaceController.text = cardData['partner2_birthplace'] ?? '';
-          _partner2BirthtimeController.text = cardData['partner2_birthtime'] ?? '';
-          _partner2RelationshipController.text = cardData['partner2_relationship'] ?? '';
-        });
+        if (mounted) {
+          setState(() {
+            _selfNameController.text = cardData['self_name'] ?? '';
+            _selfGender = cardData['self_gender'] ?? '男性';
+            _selfBirthdateController.text = cardData['self_birthdate'] ?? '';
+            _selfBirthplaceController.text = cardData['self_birthplace'] ?? '';
+            _selfBirthtimeController.text = cardData['self_birthtime'] ?? '';
+            _selfConcernsController.text = cardData['self_concerns'] ?? '';
+            
+            // 相手の情報（カルテ1）
+            _partner1NameController.text = cardData['partner1_name'] ?? '';
+            _partner1Gender = cardData['partner1_gender'] ?? '';
+            _partner1BirthdateController.text = cardData['partner1_birthdate'] ?? '';
+            _partner1BirthplaceController.text = cardData['partner1_birthplace'] ?? '';
+            _partner1BirthtimeController.text = cardData['partner1_birthtime'] ?? '';
+            _partner1RelationshipController.text = cardData['partner1_relationship'] ?? '';
+            
+            // 相手の情報（カルテ2）
+            _partner2NameController.text = cardData['partner2_name'] ?? '';
+            _partner2Gender = cardData['partner2_gender'] ?? '';
+            _partner2BirthdateController.text = cardData['partner2_birthdate'] ?? '';
+            _partner2BirthplaceController.text = cardData['partner2_birthplace'] ?? '';
+            _partner2BirthtimeController.text = cardData['partner2_birthtime'] ?? '';
+            _partner2RelationshipController.text = cardData['partner2_relationship'] ?? '';
+          });
+        }
       } else {
         // データが存在しない場合は空のままにする
         // 性別のデフォルト値だけ設定
-        setState(() {
-          _selfGender = '男性'; // デフォルトの性別のみ設定
-        });
+        if (mounted) {
+          setState(() {
+            _selfGender = '男性'; // デフォルトの性別のみ設定
+          });
+        }
         print('相談カルテデータが存在しません。新規作成されます。');
       }
     } catch (e) {
       print('相談カルテ読み込みエラー: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('エラーが発生しました: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラーが発生しました: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
   
@@ -340,9 +379,11 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
       final userEmail = prefs.getString('userEmail');
       
       if (userEmail == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ユーザー情報が見つかりません。再ログインしてください。')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ユーザー情報が見つかりません。再ログインしてください。')),
+          );
+        }
         return;
       }
       
@@ -377,23 +418,34 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
       // nullableな値を非nullableに変換
       final email = userEmail!; // nullチェックは上で既に行っているので、!演算子で安全
       final result = await dbService.saveConsultationCard(cardData, email);
-      await dbService.disconnect();
+      // 接続を維持するため、disconnectを呼び出さない
       
       if (result['success']) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'])),
-        );
-        Navigator.of(context).pop(); // 保存後に前の画面に戻る
+        // キャッシュを更新
+        _cachedCardData = cardData;
+        _cachedUserEmail = email;
+        _cacheTimestamp = DateTime.now();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result['message'])),
+          );
+          Navigator.of(context).pop(); // 保存後に前の画面に戻る
+        }
       } else {
         throw Exception(result['message']);
       }
     } catch (e) {
       print('相談カルテ保存エラー: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('エラーが発生しました: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('エラーが発生しました: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
   

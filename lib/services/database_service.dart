@@ -74,11 +74,9 @@ class DatabaseService {
   }
 
   Future<void> disconnect() async {
-    if (_isConnected && !_connection.isClosed) {
-      await _connection.close();
-      _isConnected = false;
-      print('Database disconnected');
-    }
+    // Keep connection open for better performance
+    // Only disconnect when app is shutting down or in low memory situations
+    print('Database connection kept alive for better performance');
   }
 
   Future<Map<String, dynamic>?> registerUser(String email, String password) async {
