@@ -3,6 +3,7 @@ import 'dart:ui';
 import '../theme/app_theme.dart';
 
 class CommonHeader extends StatelessWidget {
+  final String title;
   final int points;
   final VoidCallback? onSettingsTap;
   final VoidCallback? onPointsTap;
@@ -11,6 +12,7 @@ class CommonHeader extends StatelessWidget {
 
   const CommonHeader({
     Key? key, 
+    required this.title,
     required this.points,
     this.onSettingsTap,
     this.onPointsTap,
@@ -72,7 +74,17 @@ class CommonHeader extends StatelessWidget {
               ],
             ),
 
-            // 中央のポイント表示
+            // 中央のタイトル表示
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A237E), // セカンダリカラー：濃紺
+              ),
+            ),
+
+            // 右側のポイント表示
             GestureDetector(
               onTap: onPointsTap,
               child: Container(

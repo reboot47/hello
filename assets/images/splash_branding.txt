@@ -1,0 +1,16 @@
+スプラッシュ画面用のブランディングテキスト画像について
+
+この場所に「REBOOT47 SYSTEMS」テキストを含む画像ファイル「splash_branding.png」を作成してください。
+
+推奨仕様:
+- 白色テキストで「REBOOT47 SYSTEMS」と記載
+- 「REBOOT47」は大きめのフォント
+- 「SYSTEMS」はその下に小さめのフォントで配置
+- 画像は透過背景
+- 画像サイズは約400x150ピクセル程度
+
+この画像を作成したら、以下のコマンドでネイティブスプラッシュを再生成してください：
+
+```bash
+flutter pub run flutter_native_splash:create
+```

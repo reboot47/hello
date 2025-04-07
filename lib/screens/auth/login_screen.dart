@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
 import '../../utils/page_transitions.dart';
@@ -17,12 +18,27 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  // ログイン情報をSharedPreferencesに保存
+  Future<void> _saveLoginInfo() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userEmail', _emailController.text.trim());
+      print('ログイン中のメールアドレスを保存: ${_emailController.text.trim()}');
+      
+      if (_rememberMe) {
+        await prefs.setString('userPassword', _passwordController.text);
+      }
+    } catch (e) {
+      print('ログイン情報保存エラー: $e');
+    }
+  }
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _emailController = TextEditingController(text: 'wamwam@me.com');
+  final _passwordController = TextEditingController(text: 'Wamwam0055');
+  final DatabaseService dbService = DatabaseService();
   bool _isPasswordVisible = false;
   bool _isLoggingIn = false;
-  bool _rememberMe = false;
+  bool _rememberMe = true;  // Remember meをデフォルトでオン
 
   @override
   void dispose() {
@@ -323,8 +339,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     'ログイン',
                     style: TextStyle(
                       color: Color(0xFF1a237e),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
             ),
@@ -572,59 +588,59 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoggingIn = true;
       });
       
-      try {
-        // データベースサービスのインスタンスを取得
-        final dbService = DatabaseService();
-        
-        // ローディング表示
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => Center(
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 20,
-                    spreadRadius: 1,
+      // データベースサービスのインスタンスを取得
+      final dbService = DatabaseService();
+      
+      // ローディング表示
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: CircularProgressIndicator(
+                    color: AppTheme.primaryColor,
+                    strokeWidth: 3,
+                  ).animate(onPlay: (controller) => controller.repeat())
+                    .shimmer(duration: 1200.ms, color: const Color(0xFFF8BBD0).withOpacity(0.5)),
+                ),
+                const SizedBox(height: 20),
+                Text('ログイン中...',
+                  style: TextStyle(
+                    color: AppTheme.secondaryColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
                   ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 50,
-                    height: 50,
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryColor,
-                      strokeWidth: 3,
-                    ).animate(onPlay: (controller) => controller.repeat())
-                      .shimmer(duration: 1200.ms, color: const Color(0xFFF8BBD0).withOpacity(0.5)),
-                  ),
-                  const SizedBox(height: 20),
-                  Text('ログイン中...',
-                    style: TextStyle(
-                      color: AppTheme.secondaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ).animate()
-                   .fadeIn(duration: 300.ms)
-                   .then(delay: 200.ms)
-                   .fadeOut(duration: 300.ms)
-                   .then(delay: 200.ms)
-                   .fadeIn(duration: 300.ms),
-                ],
-              ),
+                ).animate()
+                 .fadeIn(duration: 300.ms)
+                 .then(delay: 200.ms)
+                 .fadeOut(duration: 300.ms)
+                 .then(delay: 200.ms)
+                 .fadeIn(duration: 300.ms),
+              ],
             ),
           ),
-        );
-        
+        ),
+      );
+      
+      try {
         // データベースに接続
         await dbService.connect();
         
@@ -634,12 +650,18 @@ class _LoginScreenState extends State<LoginScreen> {
           _passwordController.text,
         );
         
+        // 接続閉じる
+        await dbService.disconnect();
+        
         // ローディングダイアログを閉じる
         if (mounted) Navigator.of(context).pop();
         
         if (result?['success'] == true) {
           // ログイン成功
           final userData = result?['user'];
+          
+          // ログイン情報をSharedPreferencesに保存
+          _saveLoginInfo();
           
           if (mounted) {
             // ホーム画面に遷移
@@ -670,30 +692,31 @@ class _LoginScreenState extends State<LoginScreen> {
         // エラー処理
         print('Error during login: $e');
         
+        // 接続の切断を試みる
+        try {
+          await dbService.disconnect();
+        } catch (disconnectError) {
+          print('Error disconnecting database: $disconnectError');
+        }
+        
         // ローディングダイアログが表示中なら閉じる
         if (mounted) Navigator.of(context).pop();
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('エラーが発生しました: $e'),
+              content: Text('ログイン中にエラーが発生しました\n\n$e'),
               backgroundColor: Colors.redAccent,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
+              duration: const Duration(seconds: 5),
             ),
           );
         }
       } finally {
-        // データベース接続を終了
-        try {
-          final dbService = DatabaseService();
-          await dbService.disconnect();
-        } catch (e) {
-          print('Error disconnecting database: $e');
-        }
-        
+        // 全ての場合にログイン状態を元に戻す
         if (mounted) {
           setState(() {
             _isLoggingIn = false;

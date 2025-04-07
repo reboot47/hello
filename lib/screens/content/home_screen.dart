@@ -5,6 +5,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/bottom_navigation.dart';
 import '../../widgets/circular_menu.dart';
 import '../../widgets/common_header.dart';
+import 'my_page_screen.dart'; // マイページスクリーンをインポート
+import '../payment/payment_selection_screen.dart'; // 決済選択画面をインポート
 
 // 画面インデックス管理用の列挙型
 enum AppScreen { home, history, menu, ranking, profile }
@@ -26,11 +28,18 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onItemTapped(int index) {
     // 中央のメニューボタン(index=2)は除く
     if (index != 2) {
+      // マイページへの遷移
+      if (index == 4) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const MyPageScreen()),
+        );
+        return;
+      }
+      
       setState(() {
         _selectedIndex = index;
       });
       
-      // 実際のアプリではここで画面遷移の実装
       print('インデックス $index がタップされました');
     }
   }
@@ -43,12 +52,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(65),
         child: CommonHeader(
+          title: 'ホーム',
           points: 13,
           showNotificationBadge: true,
           notificationCount: 13,
           onPointsTap: () {
-            // ポイント画面への遷移など
-            print('ポイントがタップされました');
+            // ポイント画面への遷移
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const PaymentSelectionScreen(points: 13),
+              ),
+            );
           },
           onSettingsTap: () {
             // 設定画面への遷移など

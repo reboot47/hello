@@ -60,6 +60,13 @@ class _MyPageScreenState extends State<MyPageScreen> {
     _loadConsultationCardData();
     _loadUserPoints();
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadConsultationCardData();
+    _loadUserPoints();
+  }
   
   // 相談カルテデータをデータベースから読み込む
   Future<void> _loadConsultationCardData() async {
@@ -151,7 +158,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
         selectedIndex: _selectedIndex,
         onItemTapped: _onItemTapped,
         showCenterButton: false, // 中央ボタンを表示しないようにする
-        isCircularMenuOpen: true, // 別の場所に表示されていることを示す
       ),
     );
   }
@@ -159,14 +165,16 @@ class _MyPageScreenState extends State<MyPageScreen> {
   // 相談カルテセクション
   Widget _buildConsultationCard() {
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         // 相談カルテ画面に遷移
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const ConsultationCardScreen()),
-        ).then((_) {
-          // 相談カルテ画面から戻ってきたときにデータを再読み込み
-          _loadConsultationCardData();
-        });
+        );
+        // 相談カルテ画面から戻ってきたときにデータを再読み込み
+        if (mounted) {
+          await _loadConsultationCardData();
+          await _loadUserPoints();
+        }
       },
       child: Container(
         margin: const EdgeInsets.all(16),

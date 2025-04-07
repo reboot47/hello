@@ -366,7 +366,7 @@ class _SimpleRegisterScreenState extends State<SimpleRegisterScreen> {
             // 登録ボタン
             SizedBox(
               width: double.infinity,
-              height: 45,
+              height: 52,
               child: ElevatedButton(
                 onPressed: _isRegistering ? null : _attemptRegister,
                 style: ElevatedButton.styleFrom(
@@ -378,6 +378,8 @@ class _SimpleRegisterScreenState extends State<SimpleRegisterScreen> {
                   ),
                   elevation: 3,
                   shadowColor: Colors.black.withOpacity(0.3),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  minimumSize: const Size(double.infinity, 52),
                 ),
                 child: _isRegistering
                   ? SizedBox(
@@ -391,8 +393,8 @@ class _SimpleRegisterScreenState extends State<SimpleRegisterScreen> {
                   : const Text(
                       'アカウント作成',
                       style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
               ),
