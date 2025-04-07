@@ -7,6 +7,20 @@ import '../utils/password_util.dart';
 import 'web_database_service.dart';
 
 class DatabaseService {
+  // キャッシュをクリアして最新データを表示するためのフラグ
+  static bool _forceRefresh = true;
+  
+  // 強制的にデータをリフレッシュする設定を有効にする
+  static void enableForceRefresh() {
+    _forceRefresh = true;
+  }
+  
+  // 強制リフレッシュが有効かどうかをチェックし、使用後にリセット
+  static bool checkAndResetForceRefresh() {
+    final shouldRefresh = _forceRefresh;
+    _forceRefresh = false;
+    return shouldRefresh;
+  }
   static final DatabaseService _instance = DatabaseService._internal();
   late PostgreSQLConnection? _connection;
   bool _isConnected = false;
