@@ -2,6 +2,7 @@ import 'package:postgres/postgres.dart';
 import 'dart:async';
 import 'dart:io' as io;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/password_util.dart';
 import 'web_database_service.dart';
 
