@@ -109,7 +109,7 @@ class DatabaseService {
       }
       
       // ユーザーが既に存在するか確認
-      final existingUsers = await _connection.query(
+      final existingUsers = await _connection!.query(
         'SELECT * FROM users WHERE email = @email',
         substitutionValues: {'email': email},
       );
@@ -125,7 +125,7 @@ class DatabaseService {
       final hashedPassword = PasswordUtil.hashPassword(password);
       
       // 初期ポイント1000PTを付与してユーザー登録
-      final result = await _connection.query(
+      final result = await _connection!.query(
         'INSERT INTO users (email, password, points, created_at) VALUES (@email, @password, @points, @createdAt) RETURNING id, email, points',
         substitutionValues: {
           'email': email,
@@ -158,7 +158,7 @@ class DatabaseService {
     try {
       print('Checking if users table exists...');
       // users テーブルが存在するか確認
-      final tableExists = await _connection.query(
+      final tableExists = await _connection!.query(
         "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')"
       );
       
@@ -167,7 +167,7 @@ class DatabaseService {
       if (tableExists.first[0] == false) {
         print('Creating users table...');
         // テーブルが存在しない場合は作成
-        await _connection.execute('''
+        await _connection!.execute('''
           CREATE TABLE users (
             id SERIAL PRIMARY KEY,
             email VARCHAR(255) UNIQUE NOT NULL,
@@ -183,13 +183,13 @@ class DatabaseService {
         print('Created users table successfully');
       } else {
         // テーブルは存在するが、pointsカラムが存在するか確認
-        final pointsColumnExists = await _connection.query(
+        final pointsColumnExists = await _connection!.query(
           "SELECT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'points')"
         );
         
         if (pointsColumnExists.first[0] == false) {
           print('Adding points column to users table...');
-          await _connection.execute('ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0');
+          await _connection!.execute('ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0');
           print('Added points column successfully');
         }
         
@@ -286,7 +286,7 @@ class DatabaseService {
       }
       
       // ユーザーの存在確認
-      final userExists = await _connection.query(
+      final userExists = await _connection!.query(
         'SELECT id FROM users WHERE email = @email',
         substitutionValues: {'email': email},
       );
@@ -320,7 +320,7 @@ class DatabaseService {
     try {
       print('Checking if consultation_cards table exists...');
       // consultation_cards テーブルが存在するか確認
-      final tableExists = await _connection.query(
+      final tableExists = await _connection!.query(
         "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'consultation_cards')"
       );
       
@@ -329,7 +329,7 @@ class DatabaseService {
       if (tableExists.first[0] == false) {
         print('Creating consultation_cards table...');
         // テーブルが存在しない場合は作成
-        await _connection.execute('''
+        await _connection!.execute('''
           CREATE TABLE consultation_cards (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
@@ -577,7 +577,7 @@ class DatabaseService {
         await connect();
       }
 
-      final result = await _connection.query(
+      final result = await _connection!.query(
         'SELECT id, email, profile_image, display_name, points FROM users WHERE email = @email',
         substitutionValues: {'email': email},
       );
@@ -608,7 +608,7 @@ class DatabaseService {
         await connect();
       }
 
-      final result = await _connection.query(
+      final result = await _connection!.query(
         'SELECT points FROM users WHERE email = @email',
         substitutionValues: {'email': email},
       );
