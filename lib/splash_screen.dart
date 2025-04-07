@@ -32,11 +32,19 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // アニメーション開始
     _controller.forward();
     
-    // 3秒後にログイン画面へ遷移
+    // タイマーを確実に実行するためのmountedチェックを追加
+    _navigateToLogin();
+  }
+  
+  // ログイン画面への遷移を別メソッドで実装
+  void _navigateToLogin() {
     Future.delayed(const Duration(seconds: 3), () {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+      // Widgetがまだツリーに存在するか確認
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      }
     });
   }
 

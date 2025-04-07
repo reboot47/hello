@@ -2,14 +2,21 @@ import 'package:flutter/material.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/auth/login_screen.dart';
 import 'theme/app_theme.dart';
 import 'splash_screen.dart';
 
 /// アプリケーションのエントリーポイント
-void main() {
-  // プラットフォーム固有の初期化
+void main() async {
+  // Flutterフレームワークの初期化を先に行うことが重要
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // ここで共有プリファレンスをクリアするオプションを追加
+  // デバッグ用のみの機能としてコメントアウト
+  // final prefs = await SharedPreferences.getInstance();
+  // await prefs.clear();
+  // プラットフォーム固有の初期化は既に行われています
   
   // macOSプラットフォームの場合、ウィンドウサイズを設定
   if (!kIsWeb && getPlatform() == PlatformType.macOS) {
