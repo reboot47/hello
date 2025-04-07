@@ -299,7 +299,7 @@ class DatabaseService {
       final hashedPassword = PasswordUtil.hashPassword(newPassword);
       
       // パスワードを更新
-      await _connection.execute(
+      await _connection!.execute(
         'UPDATE users SET password = @password, updated_at = @updatedAt WHERE email = @email',
         substitutionValues: {
           'email': email,
@@ -634,7 +634,7 @@ class DatabaseService {
         await connect();
       }
 
-      await _connection.execute(
+      await _connection!.execute(
         'UPDATE users SET points = @points WHERE email = @email',
         substitutionValues: {
           'email': email,
