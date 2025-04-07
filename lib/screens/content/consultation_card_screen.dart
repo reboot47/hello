@@ -4,6 +4,40 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/database_service.dart';
 import '../../theme/app_theme.dart';
 
+// 日付入力フォーマッター（YYYY/MM/DD形式）
+class DateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    // 数字と / のみを許可
+    final newText = newValue.text.replaceAll(RegExp(r'[^0-9/]'), '');
+    
+    if (newText.isEmpty) {
+      return TextEditingValue(
+        text: '',
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    // 数字のみの文字列を取得
+    final digitsOnly = newText.replaceAll('/', '');
+    final buffer = StringBuffer();
+    
+    // YYYY/MM/DD形式になるように整形
+    for (int i = 0; i < digitsOnly.length && i < 8; i++) {
+      buffer.write(digitsOnly[i]);
+      if (i == 3 || i == 5) {
+        buffer.write('/');
+      }
+    }
+    
+    final formattedText = buffer.toString();
+    return TextEditingValue(
+      text: formattedText,
+      selection: TextSelection.collapsed(offset: formattedText.length),
+    );
+  }
+}
+
 class ConsultationCardScreen extends StatefulWidget {
   const ConsultationCardScreen({Key? key}) : super(key: key);
 
@@ -230,52 +264,68 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
     return selectedPrefecture;
   }
   
-  // 出生時間選択用のメソッド
+  // 出生時間選択用のメソッド（時間のみ、分は常に00）
   Future<String?> _selectBirthtime(BuildContext context, String currentValue) async {
-    // 現在の値からTimeOfDayを生成、なければ現在の時間を使用
-    TimeOfDay initialTime;
+    // 現在の値から時間を取得
+    int initialHour = 0;
     try {
       if (currentValue.isNotEmpty) {
-        // 'HH:mm' 形式をパース
+        // 'HH:00' 形式から時間を取得
         final parts = currentValue.split(':');
         if (parts.length == 2) {
-          final hour = int.parse(parts[0]);
-          final minute = int.parse(parts[1]);
-          initialTime = TimeOfDay(hour: hour, minute: minute);
+          initialHour = int.parse(parts[0]);
         } else {
-          initialTime = TimeOfDay.now();
+          initialHour = TimeOfDay.now().hour;
         }
       } else {
-        initialTime = TimeOfDay.now();
+        initialHour = TimeOfDay.now().hour;
       }
     } catch (e) {
-      initialTime = TimeOfDay.now();
+      initialHour = TimeOfDay.now().hour;
     }
     
-    // 時間選択ダイアログを表示
-    final TimeOfDay? pickedTime = await showTimePicker(
+    // 時間選択ダイアログの代わりに時間のみを選択するカスタムダイアログを表示
+    return await showDialog<String>(
       context: context,
-      initialTime: initialTime,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFFBE84FB), // ヘッダー色
-              onPrimary: Colors.white, // ヘッダーのテキスト色
-              onSurface: Colors.black, // 数字色
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('出生時間を選択（時間のみ）'),
+          content: Container(
+            width: double.maxFinite,
+            height: 250,
+            child: ListView.builder(
+              itemCount: 24,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  title: Text(
+                    '${index.toString().padLeft(2, '0')}:00',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: initialHour == index ? FontWeight.bold : FontWeight.normal,
+                      color: initialHour == index ? const Color(0xFFBE84FB) : Colors.black87,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop('${index.toString().padLeft(2, '0')}:00');
+                  },
+                  selectedTileColor: initialHour == index ? Colors.purple.shade50 : null,
+                  selected: initialHour == index,
+                );
+              },
             ),
           ),
-          child: child!,
+          actions: [
+            TextButton(
+              child: const Text('キャンセル'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
         );
       },
     );
-    
-    if (pickedTime != null) {
-      // 'HH:mm' 形式にフォーマット
-      return '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
-    }
-    
-    return null;
   }
 
   // 相談カルテを保存する
@@ -682,7 +732,7 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
     );
   }
   
-  // 生年月日選択フィールド
+  // 生年月日入力フィールド（自動フォーマット：YYYY/MM/DD形式）
   Widget _buildDateSelectorField(
     String label, 
     TextEditingController controller, {
@@ -707,36 +757,72 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
             ),
           ),
           Expanded(
-            child: GestureDetector(
-              onTap: () async {
-                // 日付選択ダイアログを表示
-                final selectedDate = await _selectDate(context, controller.text);
-                if (selectedDate != null) {
-                  setState(() {
-                    controller.text = selectedDate;
-                  });
-                }
-              },
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    controller.text.isEmpty ? '--' : controller.text,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: controller.text.isEmpty ? Colors.grey.shade400 : Colors.black87,
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                  const SizedBox(width: 5),
-                  const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-                ],
+            child: TextFormField(
+              controller: controller,
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                hintText: 'YYYY/MM/DD',
+                hintStyle: TextStyle(color: Colors.grey.shade400),
+                isDense: true,
+                contentPadding: const EdgeInsets.only(left: 16),
+                errorStyle: const TextStyle(height: 0, color: Colors.transparent),
+              ),
+              textAlign: TextAlign.right,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                // 自動的にYYYY/MM/DD形式にフォーマットする
+                DateInputFormatter(),
+                LengthLimitingTextInputFormatter(10), // YYYY/MM/DD = 10文字まで
+              ],
+              validator: isRequired 
+                  ? (value) => value!.isEmpty ? '必須項目です' : (!_isValidDate(value) ? '正しい日付形式で入力してください（例：1977/09/06）' : null)
+                  : null,
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.black87,
               ),
             ),
           ),
         ],
       ),
     );
+  }
+  
+  // 日付形式のバリデーション (YYYY/MM/DD)
+  bool _isValidDate(String date) {
+    if (date.isEmpty) return false;
+    // YYYY/MM/DD形式のチェック
+    RegExp dateFormat = RegExp(r'\d{4}/\d{2}/\d{2}');
+    if (!dateFormat.hasMatch(date)) return false;
+    
+    try {
+      final parts = date.split('/');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final day = int.parse(parts[2]);
+      
+      if (year < 1900 || year > DateTime.now().year) return false;
+      if (month < 1 || month > 12) return false;
+      
+      // 月ごとの最大日数をチェック
+      final daysInMonth = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      if (day < 1 || day > daysInMonth[month]) return false;
+      
+      // 2月29日のうるう年チェック
+      if (month == 2 && day == 29) {
+        if (!(year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) {
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
   
   // 出生地選択フィールド
@@ -796,7 +882,7 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
     );
   }
   
-  // 出生時間選択フィールド
+  // 出生時間選択フィールド（時間のみ、分は常に00）
   Widget _buildBirthtimeSelectorField(
     String label, 
     TextEditingController controller, {
@@ -823,11 +909,11 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
           Expanded(
             child: GestureDetector(
               onTap: () async {
-                // 時間選択ダイアログを表示
+                // 時間選択ダイアログを表示（時間のみ）
                 final selectedTime = await _selectBirthtime(context, controller.text);
                 if (selectedTime != null) {
                   setState(() {
-                    controller.text = selectedTime;
+                    controller.text = selectedTime; // HH:00形式
                   });
                 }
               },
