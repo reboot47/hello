@@ -7,8 +7,8 @@ import 'theme/app_theme.dart';
 import 'splash_screen.dart';
 
 /// アプリケーションのエントリーポイント
-void main() {
-  // プラットフォーム固有の初期化
+void main() async {
+  // Flutterフレームワークの初期化を最初に行う
   WidgetsFlutterBinding.ensureInitialized();
   
   // macOSプラットフォームの場合、ウィンドウサイズを設定

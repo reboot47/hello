@@ -2,17 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../services/database_service.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/bottom_navigation.dart';
-import '../../widgets/common_header.dart';
-import '../../widgets/circular_menu.dart';
-import 'home_screen.dart';
-import 'consultation_card_screen.dart';
-import '../payment/payment_selection_screen.dart';
-import '../settings/account_settings_screen.dart';
-import '../settings/notification_settings_screen.dart';
-import '../settings/settings_screen.dart';
+import '../services/database_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/bottom_navigation.dart';
+import '../widgets/common_header.dart';
+import '../widgets/circular_menu.dart';
+import '../screens/content/home_screen.dart';
+import '../screens/content/consultation_card_screen.dart';
+// 決済画面は現在実装されていないため、インポートを削除
+// 設定画面は現在実装されていないため、インポートを削除
 
 class MyPageScreen extends StatefulWidget {
   final Map<String, dynamic>? userData;
@@ -122,17 +120,21 @@ class _MyPageScreenState extends State<MyPageScreen> {
           points: _userPoints,
           showNotificationBadge: false,
           onPointsTap: () {
-            // ポイントタップ時に決済選択画面へ遷移
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => PaymentSelectionScreen(points: _userPoints),
+            // ポイントタップ時のアクション（決済選択画面は現在実装されていない）
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('決済機能は現在開発中です'),
+                behavior: SnackBarBehavior.floating,
               ),
             );
           },
           onSettingsTap: () {
-            // 設定アイコンから設定画面へ遷移
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const SettingsScreen()),
+            // 設定アイコンタップ時のアクション（設定画面は現在実装されていない）
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('設定機能は現在開発中です'),
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           },
         ),
@@ -410,9 +412,13 @@ class _MyPageScreenState extends State<MyPageScreen> {
             showBadge: false,
             showAlert: true,
             onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const AccountSettingsScreen()),
-              ).then((value) => setState(() {})); // 画面に戻った時に状態を更新
+              // アカウント設定画面は現在実装されていない
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('アカウント設定機能は現在開発中です'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
           ),
           _buildMenuItem(
@@ -422,9 +428,13 @@ class _MyPageScreenState extends State<MyPageScreen> {
             showBadge: false,
             showAlert: false,
             onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const NotificationSettingsScreen()),
-              ).then((value) => setState(() {})); // 画面に戻った時に状態を更新
+              // 通知設定画面は現在実装されていない
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('通知設定機能は現在開発中です'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
           ),
           _buildMenuItem(

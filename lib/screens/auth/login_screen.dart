@@ -7,6 +7,7 @@ import 'simple_register_screen.dart';
 import 'fortune_teller_login_screen.dart';
 import '../../services/database_service.dart';
 import '../content/home_screen.dart';
+import '../content/my_page_screen.dart';
 
 /// 一般ユーザー向けログイン画面
 class LoginScreen extends StatefulWidget {
@@ -23,6 +24,14 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isPasswordVisible = false;
   bool _isLoggingIn = false;
   bool _rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // デフォルトログイン情報を設定
+    _emailController.text = 'wamwam@me.com';
+    _passwordController.text = 'Wamwam0055';
+  }
 
   @override
   void dispose() {
@@ -642,7 +651,7 @@ class _LoginScreenState extends State<LoginScreen> {
           final userData = result?['user'];
           
           if (mounted) {
-            // ホーム画面に遷移
+            // ダッシュボードに遷移
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) => HomeScreen(userData: userData),

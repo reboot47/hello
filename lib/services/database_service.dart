@@ -565,24 +565,73 @@ class DatabaseService {
   }
 
   // ユーザーのポイントを更新する
-  Future<Map<String, dynamic>> updateUserPoints(String email, int points) async {
+  Future<Map<String, dynamic>> updateUserPoints(String email, int points, [String? source]) async {
     try {
-      if (!_isConnected) {
-        await connect();
-      }
-
-      await _connection.execute(
-        'UPDATE users SET points = @points WHERE email = @email',
+      await _connection.query(
+        'UPDATE users SET points = points + @points WHERE email = @email',
         substitutionValues: {
           'email': email,
           'points': points,
         },
       );
-
-      return {'success': true, 'points': points};
+      
+      // もしソースが指定されていれば、ポイント履歴にも記録
+      if (source != null) {
+        await _connection.query(
+          'INSERT INTO point_history (user_email, amount, source, created_at) VALUES (@email, @points, @source, NOW())',
+          substitutionValues: {
+            'email': email,
+            'points': points,
+            'source': source,
+          },
+        );
+      }
+      
+      return {
+        'success': true,
+        'message': 'ポイントを更新しました',
+      };
     } catch (e) {
-      print('Error updating user points: $e');
-      return {'success': false, 'message': 'ポイント更新中にエラーが発生しました: $e'};
+      print('ポイント更新エラー: $e');
+      return {
+        'success': false,
+        'message': 'ポイントの更新に失敗しました: $e',
+      };
+    }
+  }
+  
+  // ユーザープロフィールを更新するメソッド
+  Future<Map<String, dynamic>> updateUserProfile(String email, Map<String, dynamic> updateData) async {
+    try {
+      // 更新するフィールドと値を動的に構築
+      List<String> setStatements = [];
+      Map<String, dynamic> values = {'email': email};
+      
+      updateData.forEach((key, value) {
+        setStatements.add('$key = @$key');
+        values[key] = value;
+      });
+      
+      if (setStatements.isEmpty) {
+        return {
+          'success': false,
+          'message': '更新するデータがありません',
+        };
+      }
+      
+      final query = 'UPDATE users SET ${setStatements.join(', ')} WHERE email = @email';
+      await _connection.query(query, substitutionValues: values);
+      
+      return {
+        'success': true,
+        'message': 'プロフィールを更新しました',
+      };
+    } catch (e) {
+      print('プロフィール更新エラー: $e');
+      return {
+        'success': false,
+        'message': 'プロフィールの更新に失敗しました: $e',
+      };
     }
   }
 }
