@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:developer' as developer;
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:async';
 import 'theme/app_theme.dart';
 import 'screens/auth/login_screen.dart';
 
@@ -10,139 +14,115 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
+class _SplashScreenState extends State<SplashScreen> {
+  bool _navigated = false;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     
-    // 全画面表示にする
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+    print('スプラッシュスクリーンが初期化されました');
+    developer.log('スプラッシュスクリーンが初期化されました');
     
-    // アニメーション設定
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-    
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(_controller);
-    
-    // アニメーション開始
-    _controller.forward();
-    
-    // タイマーを確実に実行するためのmountedチェックを追加
-    _navigateToLogin();
+    // 画面遷移ロジックをセットアップ
+    _setupNavigation();
   }
   
-  // ログイン画面への遷移を別メソッドで実装
-  void _navigateToLogin() {
-    Future.delayed(const Duration(seconds: 3), () {
-      // Widgetがまだツリーに存在するか確認
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
-      }
+  void _setupNavigation() {
+    // 1. すぐに次のフレームで実行
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print('Post frame callback が実行されました');
+      _scheduleNavigation();
+    });
+    
+    // 2. バックアップタイマー (3秒後に確実に実行)
+    _timer = Timer(const Duration(seconds: 3), () {
+      print('タイマー完了: ログイン画面へ遷移');
+      _navigateToLogin();
     });
   }
 
+  void _scheduleNavigation() {
+    // 初回のビルド完了後にナビゲーション
+    Future.delayed(const Duration(milliseconds: 500), () {
+      print('初回遅延後: ログイン画面へ遷移試行');
+      _navigateToLogin();
+    });
+  }
+
+  void _navigateToLogin() {
+    if (!mounted || _navigated) {
+      print('遷移キャンセル: mounted=$mounted, navigated=$_navigated');
+      return;
+    }
+    _navigated = true;
+    
+    String platform = kIsWeb ? 'Web' : Platform.operatingSystem;
+    print('プラットフォーム: $platform でログイン画面に遷移します');
+    
+    try {
+      // メインスレッドで遷移を保証
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          print('ナビゲーション実行中...');
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (Route<dynamic> route) => false
+          );
+        }
+      });
+    } catch (e) {
+      print('ナビゲーションエラー: $e');
+      // 代替手段を試みる
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
+    }
+  }
+  
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual, 
-      overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
-    );
-    _controller.dispose();
+    _timer?.cancel();
+    print('スプラッシュスクリーンが破棄されました');
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.primaryColor,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.center,
-            radius: 1.5,
-            colors: [
-              AppTheme.primaryColor,
-              const Color(0xFF30B5BA),
+    return GestureDetector(
+      // 画面タップでも遷移できるようにする
+      onTap: _navigateToLogin,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF3bcfd4), // ターコイズ色の背景
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // アプリ名またはロゴを表示
+              const Text(
+                'REBOOT47',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // ローディングインジケータを表示
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+              const SizedBox(height: 20),
+              // タップして進むヒントを表示
+              const Text(
+                'タップして進む',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white70,
+                ),
+              ),
             ],
-            stops: const [0.4, 1.0],
-          ),
-        ),
-        child: Center(
-          child: FadeTransition(
-            opacity: _animation,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 47ロゴ
-                Container(
-                  width: 130,
-                  height: 130,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      '47',
-                      style: TextStyle(
-                        color: AppTheme.primaryColor,
-                        fontSize: 60,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                
-                // REBOOT47 SYSTEMSロゴ
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'REBOOT47',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 40,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 5),
-                      
-                      const Text(
-                        'SYSTEMS',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 8,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),

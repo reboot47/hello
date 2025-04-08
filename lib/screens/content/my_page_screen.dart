@@ -59,50 +59,48 @@ class _MyPageScreenState extends State<MyPageScreen> {
   @override
   void initState() {
     super.initState();
-    _loadConsultationCardData();
     _loadUserPoints();
+    _loadConsultationCardData();
   }
   
-  // 相談カルテデータをデータベースから読み込む
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dataRequiresReload = true;
+    _loadConsultationCardData();
+  }
+
+  final _dbService = DatabaseService();
+  Map<String, dynamic>? _cachedCardData;
+  bool _dataRequiresReload = true;
+
   Future<void> _loadConsultationCardData() async {
+    if (_isLoading) return;
+    
+    if (!_dataRequiresReload && _cachedCardData != null) {
+      _updateCardDataUI(_cachedCardData!);
+      return;
+    }
+    
     setState(() => _isLoading = true);
     
     try {
-      // ユーザーのメールアドレスを取得
       final prefs = await SharedPreferences.getInstance();
-      final userEmail = prefs.getString('userEmail');
+      final userEmail = prefs.getString('userEmail') ?? '';
       
-      if (userEmail == null) {
-        print('ユーザー情報が見つかりません');
+      if (userEmail.isEmpty) {
         setState(() => _isLoading = false);
         return;
       }
       
-      // データベースからカルテデータを取得
-      final dbService = DatabaseService();
-      await dbService.connect();
-      
-      final result = await dbService.getConsultationCard(userEmail);
-      await dbService.disconnect();
+      final result = await _dbService.getConsultationCard(userEmail);
       
       if (result['success'] && result['exists']) {
         final cardData = result['card'];
+        _cachedCardData = cardData;
+        _dataRequiresReload = false;
         
-        setState(() {
-          _selfName = cardData['self_name'] ?? '--';
-          _selfBirthdate = cardData['self_birthdate'] ?? '--';
-          _selfConcerns = cardData['self_concerns'] ?? '--';
-          
-          // 相手のデータはカルテ1を表示
-          _partnerName = cardData['partner1_name'] ?? '--';
-          _partnerBirthdate = cardData['partner1_birthdate'] ?? '--';
-          _partnerRelationship = cardData['partner1_relationship'] ?? '--';
-          
-          // 表示文字数を制限
-          if (_selfConcerns.length > 20) {
-            _selfConcerns = _selfConcerns.substring(0, 17) + '...';
-          }
-        });
+        _updateCardDataUI(cardData);
       }
     } catch (e) {
       print('相談カルテデータ読み込みエラー: $e');
@@ -111,18 +109,33 @@ class _MyPageScreenState extends State<MyPageScreen> {
     }
   }
   
+  void _updateCardDataUI(Map<String, dynamic> cardData) {
+    setState(() {
+      _selfName = cardData['self_name'] ?? '--';
+      _selfBirthdate = cardData['self_birthdate'] ?? '--';
+      _selfConcerns = cardData['self_concerns'] ?? '--';
+      
+      _partnerName = cardData['partner1_name'] ?? '--';
+      _partnerBirthdate = cardData['partner1_birthdate'] ?? '--';
+      _partnerRelationship = cardData['partner1_relationship'] ?? '--';
+      
+      if (_selfConcerns.length > 20) {
+        _selfConcerns = _selfConcerns.substring(0, 17) + '...';
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F0F6), // 画像のグレーがかった薄い赤紫色の背景
-      extendBody: true, // フローティングボタンのために必要
+      backgroundColor: const Color(0xFFF0F0F6),
+      extendBody: true,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: CommonHeader(
           points: _userPoints,
           showNotificationBadge: false,
           onPointsTap: () {
-            // ポイントタップ時に決済選択画面へ遷移
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) => PaymentSelectionScreen(points: _userPoints),
@@ -130,7 +143,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
             );
           },
           onSettingsTap: () {
-            // 設定アイコンから設定画面へ遷移
             Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const SettingsScreen()),
             );
@@ -147,24 +159,22 @@ class _MyPageScreenState extends State<MyPageScreen> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: const CircularMenu(key: ValueKey('floatingCircularMenu')), // キーを追加して一意的にする
+      floatingActionButton: const CircularMenu(key: ValueKey('floatingCircularMenu')),
       bottomNavigationBar: BottomNavigation(
         selectedIndex: _selectedIndex,
         onItemTapped: _onItemTapped,
-        showCenterButton: false, // 中央ボタンを表示しないようにする
+        showCenterButton: false,
       ),
     );
   }
 
-  // 相談カルテセクション
   Widget _buildConsultationCard() {
     return GestureDetector(
       onTap: () {
-        // 相談カルテ画面に遷移
         Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const ConsultationCardScreen()),
         ).then((_) {
-          // 相談カルテ画面から戻ってきたときにデータを再読み込み
+          _dataRequiresReload = true;
           _loadConsultationCardData();
         });
       },

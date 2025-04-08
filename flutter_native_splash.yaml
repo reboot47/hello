@@ -1,14 +1,19 @@
 flutter_native_splash:
+  # 背景色のみを使用し、画像を使わない設定
   color: "#3bcfd4"
-  image: assets/images/transparent.png
+  image: null
   android_gravity: center
   ios_content_mode: center
   web_image_mode: center
   fullscreen: true
   
+  # iOS用の詳細設定
   android_12:
-    image: assets/images/transparent.png
+    image: null
     color: "#3bcfd4"
     icon_background_color: "#3bcfd4"
   
+  # iOS用に明示的に設定
+  ios: true
+  # Web用に明示的に設定
   web: true

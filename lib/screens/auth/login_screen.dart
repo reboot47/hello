@@ -3,10 +3,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/validators.dart';
 import '../../utils/page_transitions.dart';
-import 'simple_register_screen.dart';
-import 'fortune_teller_login_screen.dart';
 import '../../services/database_service.dart';
 import '../content/home_screen.dart';
+import 'simple_register_screen.dart';
+import '../fortune_teller/fortune_teller_login_screen.dart';
+import 'dart:math';
 import '../content/my_page_screen.dart';
 
 /// 一般ユーザー向けログイン画面
@@ -370,12 +371,8 @@ class _LoginScreenState extends State<LoginScreen> {
           Center(
             child: TextButton(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  SlideRightPageRoute(
-                    page: const FortuneTellerLoginScreen(),
-                  ),
-                );
+                // 占い師ポータルに遷移
+                Navigator.of(context).pushNamed('/fortune_teller_login');
               },
               child: const Text(
                 '占い師の方はこちら',

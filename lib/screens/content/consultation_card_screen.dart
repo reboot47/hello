@@ -76,7 +76,8 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadConsultationCard();
+    // 即時でデータ読み込み開始
+    Future.microtask(() => _loadConsultationCard());
   }
   
   @override
@@ -103,8 +104,16 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
     super.dispose();
   }
   
-  // 相談カルテの情報を読み込む
+  // データベースサービスのシングルトンインスタンス
+  final _dbService = DatabaseService();
+  Map<String, dynamic>? _cachedCardData;
+  bool _isSaving = false;
+  
+  // 相談カルテの情報を読み込む（最適化バージョン）
   Future<void> _loadConsultationCard() async {
+    // すでにロード中なら重複実行を防止
+    if (_isLoading) return;
+    
     setState(() => _isLoading = true);
     
     try {
@@ -116,20 +125,17 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
         // デバッグ用にダミーメールアドレスを設定
         await prefs.setString('userEmail', 'user@example.com');
         print('ユーザー情報が見つからないため、ダミーメールアドレスを設定しました');
-        // 実際の実装ではログイン画面に戻すことも考えられます
       }
       
-      // データベースから相談カルテ情報を取得
-      final dbService = DatabaseService();
-      await dbService.connect();
-      
-      // nullableな値を非nullableに変換（null/空の場合はダミーメールを使用）
+      // データベースから相談カルテ情報を取得（接続を切断しない）
       final String email = userEmail?.isNotEmpty == true ? userEmail! : 'user@example.com';
-      final result = await dbService.getConsultationCard(email);
-      await dbService.disconnect();
+      
+      // 新しいデータベース接続管理を使用
+      final result = await _dbService.getConsultationCard(email);
       
       if (result['success'] && result['exists']) {
         final cardData = result['card'];
+        _cachedCardData = cardData; // キャッシュデータを更新
         
         // 自分の情報をセット
         setState(() {
@@ -327,12 +333,13 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
       },
     );
   }
-
-  // 相談カルテを保存する
+  
+  // 相談カルテを保存する（最適化バージョン）
   Future<void> _saveConsultationCard() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isSaving) return; // 重複保存を防止
     
-    setState(() => _isLoading = true);
+    setState(() => _isSaving = true);
     
     try {
       // ユーザーのメールアドレスを取得
@@ -370,16 +377,14 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
         'partner2_relationship': _partner2RelationshipController.text,
       };
       
-      // データベースに保存
-      final dbService = DatabaseService();
-      await dbService.connect();
-      
-      // nullableな値を非nullableに変換
-      final email = userEmail!; // nullチェックは上で既に行っているので、!演算子で安全
-      final result = await dbService.saveConsultationCard(cardData, email);
-      await dbService.disconnect();
+      // データベースに保存（新しい接続管理を使用）
+      final email = userEmail; // nullチェックは上で既に行っている
+      final result = await _dbService.saveConsultationCard(cardData, email);
       
       if (result['success']) {
+        // キャッシュデータを更新
+        _cachedCardData = cardData;
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result['message'])),
         );
@@ -393,11 +398,11 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
         SnackBar(content: Text('エラーが発生しました: $e')),
       );
     } finally {
-      setState(() => _isLoading = false);
+      setState(() => _isSaving = false);
     }
   }
   
-  // カルテ2のフィールドをリセットする
+  // カルテ1のフィールドをリセットする
   void _resetPartner1Fields() {
     setState(() {
       _partner1NameController.clear();
@@ -441,6 +446,7 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
           foregroundColor: Colors.black,
           automaticallyImplyLeading: false,
           leadingWidth: 100,
+
           leading: TextButton(
             onPressed: () => Navigator.of(context).pop(),
             style: TextButton.styleFrom(
@@ -462,17 +468,26 @@ class _ConsultationCardScreenState extends State<ConsultationCardScreen> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: _isLoading ? null : _saveConsultationCard,
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFBE84FB), // 画像通りの紫色
-                padding: EdgeInsets.zero,
-              ),
-              child: const Text(
-                '保存', 
-                style: TextStyle(fontSize: 16),
-              ),
-            ),
+            // 保存ボタン
+            _isSaving
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                  child: SizedBox(
+                    width: 24, height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF3bcfd4)),
+                  ),
+                )
+              : TextButton(
+                  onPressed: _saveConsultationCard,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFBE84FB), // 画像通りの紫色
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: const Text(
+                    '保存', 
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ),
             const SizedBox(width: 20),
           ],
         ),

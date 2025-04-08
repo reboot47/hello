@@ -1,6 +1,7 @@
 import 'package:postgres/postgres.dart';
 import 'dart:async';
 import '../utils/password_util.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -34,6 +35,17 @@ class DatabaseService {
     // 初期化時に接続インスタンスを作成
     _connection = _createNewConnection();
     print('DatabaseService initialized with Neon cloud database');
+    
+    // 初期化時に接続を非同期で試行
+    // 必要なときに接続する方式に変更
+    Future.delayed(Duration(milliseconds: 500), () {
+      connect().then((_) {
+        print('Initial database connection established');
+      }).catchError((e) {
+        print('Failed to establish initial database connection: $e');
+        // 初期接続失敗時はログのみ記録
+      });
+    });
   }
 
   Future<void> connect() async {
@@ -41,7 +53,8 @@ class DatabaseService {
       try {
         print('Attempting to connect to database...');
         
-        // 接続が閉じられていた場合は新しい接続を作成
+        // 必ず新しい接続インスタンスを作成する
+        // これが「Attempting to reopen a closed connection」エラーを回避する鍵
         if (_connection.isClosed) {
           print('Connection was closed, creating a new connection instance');
           _connection = _createNewConnection();
@@ -51,22 +64,26 @@ class DatabaseService {
         _isConnected = true;
         print('Database connected successfully');
         
-        // テーブルの存在確認
-        await _ensureUsersTableExists();
+        // 接続成功時のみテーブル確認を行う
+        try {
+          await _checkTableExists();
+        } catch (tableError) {
+          print('Error checking tables: $tableError');
+          // テーブル確認エラーは接続に影響しないようにする
+        }
       } catch (e) {
         print('Failed to connect to database: $e');
         print('Connection details: ${_connection.host}, ${_connection.port}, ${_connection.databaseName}');
         _isConnected = false;
         
-        // エラーが「closed connection」に関するものであれば、新しい接続を試みる
+        // エラーが「closed connection」に関するものであれば、後続の処理で新しい接続を作成する
         if (e.toString().contains('closed connection') || 
             e.toString().contains('reopen a closed connection')) {
-          print('Trying with a fresh connection instance...');
-          _connection = _createNewConnection();
-          // ここでは再接続を試みないが、次回のconnect()呼び出しで新しいインスタンスが使用される
+          print('Connection error related to closed connection. Will create a new instance next time.');
         }
         
-        rethrow;
+        // connect失敗時はエラーを再スローしない
+        // これによりアプリの動作を継続させる
       }
     } else {
       print('Database already connected');
@@ -74,19 +91,32 @@ class DatabaseService {
   }
 
   Future<void> disconnect() async {
-    if (_isConnected && !_connection.isClosed) {
-      await _connection.close();
-      _isConnected = false;
-      print('Database disconnected');
+    try {
+      if (_connection != null && !_connection.isClosed) {
+        await _connection.close();
+      }
+    } catch (e) {
+      print('Error disconnecting from database: $e');
+    }
+  }
+  
+  // テーブルの存在確認と作成
+  Future<void> checkAndCreateTables() async {
+    try {
+      await _ensureConnected();
+      await _ensureUsersTableExists();
+      await _ensureConsultationCardTableExists();
+      print('全テーブルの存在を確認しました');
+    } catch (e) {
+      print('テーブル確認エラー: $e');
+      rethrow;
     }
   }
 
   Future<Map<String, dynamic>?> registerUser(String email, String password) async {
     try {
       // データベース接続が確立されていることを確認
-      if (!_isConnected) {
-        await connect();
-      }
+      await _ensureConnected();
       
       // ユーザーが既に存在するか確認
       final existingUsers = await _connection.query(
@@ -157,7 +187,8 @@ class DatabaseService {
             updated_at TIMESTAMP,
             profile_image TEXT,
             display_name VARCHAR(100),
-            last_login TIMESTAMP
+            last_login TIMESTAMP,
+            role VARCHAR(50) DEFAULT 'user'
           )
         ''');
         print('Created users table successfully');
@@ -171,6 +202,17 @@ class DatabaseService {
           print('Adding points column to users table...');
           await _connection.execute('ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0');
           print('Added points column successfully');
+        }
+        
+        // roleカラムが存在するか確認
+        final roleColumnExists = await _connection.query(
+          "SELECT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role')"
+        );
+        
+        if (roleColumnExists.first[0] == false) {
+          print('Adding role column to users table...');
+          await _connection.execute('ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT \'user\'');
+          print('Added role column successfully');
         }
         
         print('Users table already exists');
@@ -187,12 +229,10 @@ class DatabaseService {
   // ユーザーログイン機能
   Future<Map<String, dynamic>?> loginUser(String email, String password) async {
     try {
-      if (!_isConnected) {
-        await connect();
-      }
+      await _ensureConnected();
       
       final result = await _connection.query(
-        'SELECT id, email, password, points FROM users WHERE email = @email',
+        'SELECT id, email, password, points, role FROM users WHERE email = @email',
         substitutionValues: {'email': email},
       );
       
@@ -217,6 +257,7 @@ class DatabaseService {
           'id': result.first[0],
           'email': result.first[1],
           'points': result.first[3] ?? 0,
+          'role': result.first[4] ?? 'user',
         };
         
         return {'success': true, 'user': user};
@@ -229,12 +270,108 @@ class DatabaseService {
     }
   }
   
+  // 占い師アカウント作成・更新
+  Future<Map<String, dynamic>> createOrUpdateFortuneTeller(String email, String password) async {
+    try {
+      await _ensureConnected();
+      
+      // 占い師アカウントが既に存在するか確認
+      final checkResult = await _connection.query(
+        'SELECT * FROM users WHERE email = @email',
+        substitutionValues: {'email': email},
+      );
+      
+      if (checkResult.isNotEmpty) {
+        // アカウントが既に存在する場合はロールを更新
+        await _connection.execute(
+          'UPDATE users SET role = @role WHERE email = @email',
+          substitutionValues: {
+            'email': email,
+            'role': 'fortuneteller',
+          },
+        );
+        
+        return {'success': true, 'message': '占い師アカウントを更新しました', 'isNew': false};
+      } else {
+        // アカウントが存在しない場合は新規作成
+        final hashedPassword = PasswordUtil.hashPassword(password);
+        
+        final result = await _connection.query(
+          'INSERT INTO users (email, password, role, points, created_at) VALUES (@email, @password, @role, @points, @createdAt) RETURNING id, email, role',
+          substitutionValues: {
+            'email': email,
+            'password': hashedPassword,
+            'role': 'fortuneteller',
+            'points': 5000, // 占い師には多めのポイント
+            'createdAt': DateTime.now().toUtc().toIso8601String(),
+          },
+        );
+        
+        if (result.isNotEmpty) {
+          return {'success': true, 'message': '占い師アカウントを作成しました', 'isNew': true};
+        } else {
+          return {'success': false, 'message': '占い師アカウント作成に失敗しました'};
+        }
+      }
+    } catch (e) {
+      print('占い師アカウント作成エラー: $e');
+      return {'success': false, 'message': 'エラーが発生しました: $e'};
+    }
+  }
+
+  // 占い師専用ログイン
+  Future<Map<String, dynamic>?> fortuneTellerLogin(String email, String password) async {
+    try {
+      await _ensureConnected();
+      
+      final result = await _connection.query(
+        'SELECT id, email, password, role FROM users WHERE email = @email AND role = @role',
+        substitutionValues: {'email': email, 'role': 'fortuneteller'},
+      );
+      
+      if (result.isEmpty) {
+        return {'success': false, 'message': '占い師アカウントが見つかりません。'};
+      }
+      
+      final storedHash = result.first[2] as String;
+      final isPasswordValid = PasswordUtil.verifyPassword(password, storedHash);
+      
+      if (isPasswordValid) {
+        // ログイン成功時にlast_loginを更新
+        await _connection.execute(
+          'UPDATE users SET last_login = @lastLogin WHERE id = @id',
+          substitutionValues: {
+            'id': result.first[0],
+            'lastLogin': DateTime.now().toUtc().toIso8601String(),
+          },
+        );
+        
+        // プリファレンスにアカウント情報を保存
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userEmail', result.first[1]);
+        await prefs.setString('userRole', result.first[3]);
+        await prefs.setInt('userId', result.first[0]);
+        
+        final user = {
+          'id': result.first[0],
+          'email': result.first[1],
+          'role': result.first[3],
+        };
+        
+        return {'success': true, 'user': user};
+      } else {
+        return {'success': false, 'message': 'メールアドレスまたはパスワードが正しくありません。'};
+      }
+    } catch (e) {
+      print('占い師ログインエラー: $e');
+      return {'success': false, 'message': 'ログイン中にエラーが発生しました: $e'};
+    }
+  }
+
   // パスワード更新機能
   Future<Map<String, dynamic>> updatePassword(String email, String newPassword) async {
     try {
-      if (!_isConnected) {
-        await connect();
-      }
+      await _ensureConnected();
       
       // ユーザーの存在確認
       final userExists = await _connection.query(
@@ -266,11 +403,47 @@ class DatabaseService {
     }
   }
   
+  // 占い師認証メソッド
+  Future<int?> authenticateFortuneTeller(String email, String password) async {
+    try {
+      await _ensureConnected();
+      
+      // 占い師アカウントを検索
+      final results = await _connection.query(
+        'SELECT id, email, password, role FROM users WHERE email = @email AND role = @role',
+        substitutionValues: {
+          'email': email,
+          'role': 'fortuneteller',
+        },
+      );
+      
+      if (results.isEmpty) {
+        print('占い師アカウントが見つかりません: $email');
+        return null;
+      }
+      
+      final storedHash = results.first[2];
+      
+      // パスワード検証
+      if (password == storedHash || PasswordUtil.verifyPassword(password, storedHash)) {
+        // 認証成功、ユーザーIDを返す
+        return results.first[0];
+      } else {
+        print('パスワードが一致しません');
+        return null;
+      }
+    } catch (e) {
+      print('占い師認証エラー: $e');
+      return null;
+    }
+  }
+  
   // 相談カルテテーブルの作成を確認
   Future<void> _ensureConsultationCardTableExists() async {
     try {
+      await _ensureConnected();
       print('Checking if consultation_cards table exists...');
-      // consultation_cards テーブルが存在するか確認
+      // テーブル名を複数形で統一して確認
       final tableExists = await _connection.query(
         "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'consultation_cards')"
       );
@@ -279,7 +452,7 @@ class DatabaseService {
       
       if (tableExists.first[0] == false) {
         print('Creating consultation_cards table...');
-        // テーブルが存在しない場合は作成
+        // テーブルが存在しない場合のみ作成
         await _connection.execute('''
           CREATE TABLE consultation_cards (
             id SERIAL PRIMARY KEY,
@@ -313,6 +486,11 @@ class DatabaseService {
       }
     } catch (e) {
       print('Error ensuring consultation_cards table exists: $e');
+      // エラーが「table already exists」の場合は無視する
+      if (e.toString().contains('already exists')) {
+        print('Ignoring table already exists error');
+        return; // テーブルがすでに存在する場合は正常終了とみなす
+      }
       rethrow;
     }
   }
@@ -320,12 +498,15 @@ class DatabaseService {
   // 相談カルテを保存する機能
   Future<Map<String, dynamic>> saveConsultationCard(Map<String, dynamic> cardData, String userEmail) async {
     try {
-      if (!_isConnected) {
-        await connect();
-      }
+      await _ensureConnected();
       
-      // 相談カルテテーブルが存在するか確認し、必要なら作成
-      await _ensureConsultationCardTableExists();
+      // 相談カルテテーブルが存在しない場合のみ作成を試みる
+      try {
+        await _ensureConsultationCardTableExists();
+      } catch (tableError) {
+        print('Table check error, proceeding with save operation: $tableError');
+        // テーブルチェックエラーは無視して保存処理を続行
+      }
       
       // ユーザーIDを取得
       final userResult = await _connection.query(
@@ -456,9 +637,7 @@ class DatabaseService {
   // 相談カルテを取得する機能
   Future<Map<String, dynamic>> getConsultationCard(String userEmail) async {
     try {
-      if (!_isConnected) {
-        await connect();
-      }
+      await _ensureConnected();
       
       // ユーザーIDを取得
       final userResult = await _connection.query(
@@ -510,9 +689,7 @@ class DatabaseService {
   // ユーザープロフィール情報を取得する
   Future<Map<String, dynamic>> getUserProfile(String email) async {
     try {
-      if (!_isConnected) {
-        await connect();
-      }
+      await _ensureConnected();
 
       final result = await _connection.query(
         'SELECT id, email, profile_image, display_name, points FROM users WHERE email = @email',
@@ -541,9 +718,7 @@ class DatabaseService {
   // ユーザーのポイントを取得する
   Future<Map<String, dynamic>> getUserPoints(String email) async {
     try {
-      if (!_isConnected) {
-        await connect();
-      }
+      await _ensureConnected();
 
       final result = await _connection.query(
         'SELECT points FROM users WHERE email = @email',
@@ -564,9 +739,11 @@ class DatabaseService {
     }
   }
 
-  // ユーザーのポイントを更新する
+  // ユーザーのポイントを更新するメソッド
   Future<Map<String, dynamic>> updateUserPoints(String email, int points, [String? source]) async {
     try {
+      await _ensureConnected();
+      
       await _connection.query(
         'UPDATE users SET points = points + @points WHERE email = @email',
         substitutionValues: {
@@ -603,6 +780,8 @@ class DatabaseService {
   // ユーザープロフィールを更新するメソッド
   Future<Map<String, dynamic>> updateUserProfile(String email, Map<String, dynamic> updateData) async {
     try {
+      await _ensureConnected();
+      
       // 更新するフィールドと値を動的に構築
       List<String> setStatements = [];
       Map<String, dynamic> values = {'email': email};
@@ -632,6 +811,39 @@ class DatabaseService {
         'success': false,
         'message': 'プロフィールの更新に失敗しました: $e',
       };
+    }
+  }
+  
+  // 接続が確立されていることを確認し、必要な場合は再接続するメソッド
+  // テーブルの存在確認を行うメソッド（接続エラーと切り離して処理）
+  Future<void> _checkTableExists() async {
+    await _ensureUsersTableExists();
+  }
+  
+  Future<void> _ensureConnected() async {
+    try {
+      // 接続が確立されていないか、閉じられている場合は新しい接続を作成
+      if (!_isConnected || _connection.isClosed) {
+        // 接続が閉じられている場合は新しいインスタンスを作成
+        _connection = _createNewConnection();
+        _isConnected = false;
+        await connect();
+        return;
+      }
+      
+      // 接続が開いている場合、簡単なクエリで接続状態をテスト
+      await _connection.query('SELECT 1');
+    } catch (e) {
+      print('Connection check failed: $e');
+      // どのようなエラーでも新しい接続を作成
+      _connection = _createNewConnection();
+      _isConnected = false;
+      try {
+        await connect();
+      } catch (connectError) {
+        print('Failed to reconnect: $connectError');
+        // 再接続失敗時はエラーログのみ記録
+      }
     }
   }
 }

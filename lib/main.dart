@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:io' show Platform;
+import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/fortune_teller/fortune_teller_login_screen.dart';
+import 'screens/fortune_teller/fortune_teller_home_screen.dart';
 import 'theme/app_theme.dart';
 import 'splash_screen.dart';
 
@@ -10,6 +13,9 @@ import 'splash_screen.dart';
 void main() async {
   // Flutterフレームワークの初期化を最初に行う
   WidgetsFlutterBinding.ensureInitialized();
+  
+  developer.log('アプリケーションを開始します');
+  print('アプリケーションを開始します');
   
   // macOSプラットフォームの場合、ウィンドウサイズを設定
   if (!kIsWeb && getPlatform() == PlatformType.macOS) {
@@ -20,6 +26,9 @@ void main() async {
     // window_size.setWindowMinSize(const Size(400, 600));
     // window_size.setWindowMaxSize(const Size(800, 1200));
   }
+  
+  // サブクラスのバグを回避するために少し遅延を入れる
+  await Future.delayed(const Duration(milliseconds: 100));
   
   runApp(const MyApp());
 }
@@ -44,13 +53,27 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    developer.log('MyAppをビルド中');
+    print('MyAppをビルド中');
+    
     return MaterialApp(
       title: 'REBOOT47',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.getLightTheme(),
       darkTheme: AppTheme.getDarkTheme(),
       themeMode: ThemeMode.system, // システム設定に従う
-      home: const SplashScreen(), // カスタムスプラッシュスクリーンを表示
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const SplashScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/fortune_teller_login': (context) => const FortuneTellerLoginScreen(),
+        '/fortune_teller_home': (context) => const FortuneTellerHomeScreen(),
+      },
+      onGenerateRoute: (settings) {
+        developer.log('ルート生成: ${settings.name}');
+        // フォールバックのルーティング
+        return MaterialPageRoute(builder: (_) => const LoginScreen());
+      },
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../services/database_service.dart';
+import '../auth/login_screen.dart';
 
 /// 設定画面
 class SettingsScreen extends StatefulWidget {
@@ -13,6 +14,64 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String _appVersion = '1.2.3'; // アプリバージョン
+  
+  // ログアウト処理
+  Future<void> _logout() async {
+    // ログアウト確認ダイアログを表示
+    final bool? confirmLogout = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('ログアウト確認'),
+          content: const Text('本当にログアウトしますか？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('ログアウト', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+    
+    if (confirmLogout == true) {
+      try {
+        // SharedPreferencesからユーザー情報を削除
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('userEmail');
+        await prefs.remove('userId');
+        
+        // データベース接続を切断
+        try {
+          final dbService = DatabaseService();
+          await dbService.disconnect();
+        } catch (e) {
+          print('データベース切断エラー: $e');
+          // データベース切断失敗を無視して続行
+        }
+        
+        // ログイン画面に遷移し、バックスタックをクリア
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+        
+        // 成功メッセージを表示
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ログアウトしました')),
+        );
+      } catch (e) {
+        print('ログアウトエラー: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ログアウト中にエラーが発生しました')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +115,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SnackBar(content: Text('ブロックリスト機能は現在開発中です')),
                 );
               },
+              showDivider: true,
+            ),
+            _buildSettingItem(
+              title: 'ログアウト',
+              titleColor: Colors.red, // 警告カラー
+              onTap: _logout,
               showDivider: true,
             ),
             _buildSettingItem(
@@ -176,6 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String title,
     required VoidCallback onTap,
     bool showDivider = true,
+    Color? titleColor,
   }) {
     return Column(
       children: [
@@ -183,15 +249,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: onTap,
           child: Container(
             color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.black87,
+                    style: TextStyle(
                       fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      color: titleColor,
                     ),
                   ),
                 ),
